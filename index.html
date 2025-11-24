@@ -55,7 +55,6 @@
                 };
             }, []);
 
-
             const generateSquares = () => {
                 if (!canvas) {
                     return;
@@ -68,7 +67,7 @@
                 for (let i = 0; i < numSquares; i++) {
                     const rect = new fabric.Rect({
                         left: 50 + (i * SQUARE_SIZE) % 600,
-                        top: 50 + Math.floor(i / 7) * SQUARE_SIZE,
+                        top: 50 + Math.floor(i / 8) * SQUARE_SIZE,
                         width: SQUARE_SIZE,
                         height: SQUARE_SIZE,
                         fill: colors[i % colors.length],
@@ -85,15 +84,15 @@
                 drawLargestSquare(canvas)
             }
 
-
             const getSquareCorners = (obj) => {
                 const matrix = obj.calcTransformMatrix();
 
+                // Ne változtass a sorrenden! 5 óra kellett rá, hogy rájöjjek, miért nem jó a pontellenőrzés, a sorrend miatt!
                 const corners = [
                     { x: -obj.width / 2, y: -obj.height / 2 },
                     { x: obj.width / 2, y: -obj.height / 2 },
-                    { x: -obj.width / 2, y: obj.height / 2 },
-                    { x: obj.width / 2, y: obj.height / 2 }
+                    { x: obj.width / 2, y: obj.height / 2 },
+                    { x: -obj.width / 2, y: obj.height / 2 }
                 ]
 
                 return corners.map(corner => {
@@ -124,22 +123,20 @@
 
             const pointInPolygon = (point, polygon) => {
                 let inside = false;
-                for (let i = 0; i < polygon.length; i++)
-                {
+                for (let i = 0; i < polygon.length; i++) {
                     let j = i - 1;
-                    if (j < 0) {j = polygon.length - 1;}
+                    if (j < 0) { j = polygon.length - 1; }
                     const xi = polygon[i].x
                     const yi = polygon[i].y;
                     const xj = polygon[j].x
                     const yj = polygon[j].y;
 
                     const betweenTwoYs = (yi > point.y) !== (yj > point.y);
-                    const interpolationRatio = (point.y - yi) / (yj - yi); 
+                    const interpolationRatio = (point.y - yi) / (yj - yi);
                     // 0 -> egy magasság yi-vel, 1 ->  yj-vel, közte -> a kettő között
                     const width = xj - xi;
                     const toTheLeft = point.x < width * interpolationRatio + xi;
-                    if (betweenTwoYs && toTheLeft)
-                    {
+                    if (betweenTwoYs && toTheLeft) {
                         // Páratlan számú metszés -> Benne van
                         inside = !inside;
                     }
@@ -150,29 +147,25 @@
             const squareInsideUnion = (square_to_test, allSquareCorners) => {
                 for (let corner of square_to_test) {
                     let cornerInside = false;
-                    for (let squareCorner of allSquareCorners)
-                    {
-                        if (pointInPolygon(corner, squareCorner))
-                        {
+                    for (let squareCorner of allSquareCorners) {
+                        if (pointInPolygon(corner, squareCorner)) {
                             cornerInside = true;
                             break;
                         }
                     }
-                    if (!cornerInside)
-                    {
+                    if (!cornerInside) {
                         return false;
                     }
                 }
                 return true;
             }
 
-            const findLargestSquare = (allSquareCorners, bbox) => {
-                if (!bbox)
-                {
-                    return {size: 1, center: null}
+            const findLargestSquareOld = (allSquareCorners, bbox) => {
+                if (!bbox) {
+                    return { size: 0, center: null }
                 }
 
-                let maxSize = 1;
+                let maxSize = 0;
                 let bestCenter = null;
 
                 const searchArea = {
@@ -183,7 +176,7 @@
                 }
 
                 const gridStep = 4; // túl kicsi -> túl lassú; túl nagy -> pontatlan
-                
+
                 for (let i = searchArea.minX; i <= searchArea.maxX; i += gridStep) {
                     for (let j = searchArea.minY; j <= searchArea.maxY; j += gridStep) {
                         let lowBound = 0;
@@ -195,39 +188,91 @@
                         while (lowBound + 0.01 < highBound) {
                             const midPoint = (lowBound + highBound) / 2
                             const halfSize = midPoint / 2
-                            
+
                             const square_to_test = [
-                                {x: i - halfSize, y: j - halfSize},
-                                {x: i - halfSize, y: j + halfSize},
-                                {x: i + halfSize, y: j + halfSize},
-                                {x: i + halfSize, y: j - halfSize}
+                                { x: i - halfSize, y: j - halfSize },
+                                { x: i - halfSize, y: j + halfSize },
+                                { x: i + halfSize, y: j + halfSize },
+                                { x: i + halfSize, y: j - halfSize }
                             ]
 
-                            if (squareInsideUnion(square_to_test, allSquareCorners))
-                            {
+                            if (squareInsideUnion(square_to_test, allSquareCorners)) {
                                 lowBound = midPoint
                             }
-                            else
-                            {
+                            else {
                                 highBound = midPoint
                             }
                         }
-                        if (lowBound > maxSize)
-                        {
+                        if (lowBound > maxSize) {
                             maxSize = lowBound;
-                            bestCenter = {x: i, y: j};
+                            bestCenter = { x: i, y: j };
                         }
                     }
                 }
-                return {size: maxSize, center: bestCenter};
+                return { size: maxSize, center: bestCenter };
+            }
+
+            const findLargestSquare = (allSquareCorners) => {
+                if (allSquareCorners.length === 0) {
+                    return { size: 0, center: null };
+                }
+
+                let maxSize = 0;
+                let bestCenter = null;
+
+                for (let squareCorner of allSquareCorners) {
+                    const isRotated = Math.abs(squareCorner[0].y - squareCorner[1].y) > 0.1;
+
+                    if (isRotated) {
+                        continue; // Ha forgatva van, ugrunk
+                    }
+
+                    let topLeft = squareCorner[0];
+                    for (let corner of squareCorner) {
+                        if (corner.x <= topLeft.x && corner.y <= topLeft.y) {
+                            topLeft = corner;
+                        }
+                    }
+
+                    let currentSize = SQUARE_SIZE;
+                    const growthStep = 1;
+
+                    while (true) {
+                        const testSize = currentSize + growthStep;
+                        console.log("Testing size:", testSize);
+                        // Számít a sorrend!
+                        const square_to_test = [
+                            { x: topLeft.x, y: topLeft.y },
+                            { x: topLeft.x + testSize, y: topLeft.y },
+                            { x: topLeft.x + testSize, y: topLeft.y + testSize },
+                            { x: topLeft.x, y: topLeft.y + testSize }
+                        ];
+
+                        if (squareInsideUnion(square_to_test, allSquareCorners)) {
+                            currentSize = testSize;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    if (currentSize > maxSize) {
+                        maxSize = currentSize;
+                        const halfSize = currentSize / 2;
+                        bestCenter = {
+                            x: topLeft.x + halfSize,
+                            y: topLeft.y + halfSize
+                        };
+                    }
+                }
+
+                return { size: maxSize, center: bestCenter };
             }
 
             const drawLargestSquare = (fabricCanvas) => {
                 // Ha nincs kiszűrve, akkor belaggol az oldal, valószínűleg végtelen ciklus
                 const objects = fabricCanvas.getObjects().filter(obj => obj.id !== "largestSquare");
 
-                if (objects.length === 0) 
-                {
+                if (objects.length === 0) {
                     setLargestSquareArea(0);
                     return;
                 }
@@ -236,19 +281,19 @@
                 const allPoints = allSquareCorners.flat();
                 const bbox = getBoundingBox(allPoints);
 
-                const result = findLargestSquare(allSquareCorners, bbox);
+                const result = findLargestSquare(allSquareCorners/*, bbox*/);
 
                 const k = result.size / SQUARE_SIZE
-                const area = k*k;
+                const area = k * k;
                 setLargestSquareArea(area);
 
-                for (const obj of fabricCanvas.getObjects()){
+                for (const obj of fabricCanvas.getObjects()) {
                     if (obj.id === "largestSquare") {
                         fabricCanvas.remove(obj);
                     }
                 }
 
-                if (result.center && result.size > 1){
+                if (result.center && result.size > 1) {
                     const squareToShow = new fabric.Rect({
                         left: result.center.x,
                         top: result.center.y,
@@ -263,6 +308,7 @@
                         id: "largestSquare"
                     })
                     fabricCanvas.add(squareToShow);
+                    fabricCanvas.sendToBack(squareToShow);
                 }
                 fabricCanvas.renderAll();
             }
@@ -275,27 +321,31 @@
             }
 
             return (
-                <div className = "container mx-auto p-5 mt-4 mb-4">
+                <div className="container mx-auto p-5 mt-4 mb-4">
                     <h1 className="text-dark mb-2">Négyzet konstrukció vizuálisan</h1>
 
-                    <div className = "controls align-items-center">
+                    <div className="controls align-items-center">
                         <div className="control-group">
                             <label>Négyzetek száma:</label>
-                            <input id = "numSquares" type="number" className="form-control" min="1" max="20" value={numSquares} onChange={(e) => setNumSquares(parseInt(e.target.value))}/>
+                            <input id="numSquares" type="number" className="form-control" min="1" max="20" value={numSquares} onChange={(e) => setNumSquares(parseInt(e.target.value))} />
                         </div>
-                        <button className = "btn btn-primary" onClick = {generateSquares}>Négyzetek generálása</button>
-                        <button className = "btn btn-primary" onClick = {resetCanvas}>Törlés</button>
+                        <button className="btn btn-primary" onClick={generateSquares}>Négyzetek generálása</button>
+                        <button className="btn btn-primary" onClick={resetCanvas}>Törlés</button>
                     </div>
-                    <div className = "info-panel row">
-                            <div className="info-card h-100 col-md-6">
-                                <div className="info-label">Négyzetek száma</div>
-                                <div className="info-value">{canvas ? canvas.getObjects().filter(obj => obj.id !== "largestSquare").length : 0}</div>
-                            </div>
-                            <div className="info-card h-100 col-md-6">
-                                <div className="info-label">Legnagyobb lefedhető négyzet területe</div>
-                                <div className="info-value">{largestSquareArea}</div>
-                            </div>
-                        
+                    <div className="info-panel row">
+                        <div className="info-card h-100 col-md-4">
+                            <div className="info-label">Négyzetek száma</div>
+                            <div className="info-value">{canvas ? canvas.getObjects().filter(obj => obj.id !== "largestSquare").length : 0}</div>
+                        </div>
+                        <div className="info-card h-100 col-md-4">
+                            <div className="info-label">Legnagyobb lefedhető négyzet területe</div>
+                            <div className="info-value">{largestSquareArea}</div>
+                        </div>
+                        <div className="info-card h-100 col-md-4">
+                            <div className="info-label">Legnagyobb lefedhető négyzet oldala (K)</div>
+                            <div className="info-value">{Math.sqrt(largestSquareArea)}</div>
+                        </div>
+
                     </div>
                     <div className="canvasContainer">
                         <canvas id="canvas" ref={canvasRef}></canvas>
