@@ -149,15 +149,21 @@
 
             const squareInsideUnion = (square_to_test, allSquareCorners) => {
                 for (let corner of square_to_test) {
+                    let cornerInside = false;
                     for (let squareCorner of allSquareCorners)
                     {
                         if (pointInPolygon(corner, squareCorner))
                         {
-                            return true;
+                            cornerInside = true;
+                            break;
                         }
                     }
+                    if (!cornerInside)
+                    {
+                        return false;
+                    }
                 }
-                return false;
+                return true;
             }
 
             const findLargestSquare = (allSquareCorners, bbox) => {
@@ -176,7 +182,7 @@
                     maxY: bbox.maxY
                 }
 
-                const gridStep = 5; // túl kicsi -> túl lassú; túl nagy -> pontatlan
+                const gridStep = 4; // túl kicsi -> túl lassú; túl nagy -> pontatlan
                 
                 for (let i = searchArea.minX; i <= searchArea.maxX; i += gridStep) {
                     for (let j = searchArea.minY; j <= searchArea.maxY; j += gridStep) {
@@ -186,7 +192,7 @@
                             highBound = searchArea.maxY - searchArea.minY;
                         }
 
-                        while (lowBound + 1 < highBound) {
+                        while (lowBound + 0.01 < highBound) {
                             const midPoint = (lowBound + highBound) / 2
                             const halfSize = midPoint/2
                             
@@ -222,7 +228,7 @@
 
                 if (objects.length === 0) 
                 {
-                    setLargestSquareArea(1);
+                    setLargestSquareArea(0);
                     return;
                 }
 
@@ -264,7 +270,7 @@
             const resetCanvas = () => {
                 if (canvas) {
                     canvas.clear();
-                    setLargestSquareArea(1);
+                    setLargestSquareArea(0);
                 }
             }
 
